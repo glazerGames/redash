@@ -1,32 +1,39 @@
+# Frontend build stage
 FROM node:18-bookworm AS frontend-builder
 
+# Install Yarn globally
 RUN npm install --global --force yarn@1.22.22
 
-# Controls whether to build the frontend assets
-ARG skip_frontend_build
-
+# Environment variables for Cypress and Puppeteer (for headless testing)
 ENV CYPRESS_INSTALL_BINARY=0
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
 
+# Create a non-root user to run the frontend build
 RUN useradd -m -d /frontend redash
 USER redash
 
+# Set the working directory for the frontend
 WORKDIR /frontend
 COPY --chown=redash package.json yarn.lock .yarnrc /frontend/
 COPY --chown=redash viz-lib /frontend/viz-lib
 COPY --chown=redash scripts /frontend/scripts
 
-# Controls whether to instrument code for coverage information
+# Set environment for code coverage, defaults to 'test' if enabled
 ARG code_coverage
 ENV BABEL_ENV=${code_coverage:+test}
 
-# Avoid issues caused by lags in disk and network I/O speeds when working on top of QEMU emulation for multi-platform image building.
+# Avoid issues with QEMU emulation during multi-platform builds
 RUN yarn config set network-timeout 300000
 
+# Build the frontend assets unless skip_frontend_build is set
+ARG skip_frontend_build
 RUN if [ "x$skip_frontend_build" = "x" ] ; then yarn --frozen-lockfile --network-concurrency 1; fi
 
+# Copy client files and Webpack config
 COPY --chown=redash client /frontend/client
 COPY --chown=redash webpack.config.js /frontend/
+
+# Build the frontend if skip_frontend_build is not set
 RUN <<EOF
   if [ "x$skip_frontend_build" = "x" ]; then
     yarn build
@@ -37,13 +44,16 @@ RUN <<EOF
   fi
 EOF
 
+# Python and backend build stage
 FROM python:3.10-slim-bookworm
 
+# Expose the port for Redash (default 5000)
 EXPOSE 5000
 
+# Create a non-root user for the backend
 RUN useradd --create-home redash
 
-# Ubuntu packages
+# Install required system packages for Redash and its dependencies
 RUN apt-get update && \
   apt-get install -y --no-install-recommends \
   pkg-config \
@@ -54,15 +64,10 @@ RUN apt-get update && \
   libffi-dev \
   sudo \
   git-core \
-  # Kerberos, needed for MS SQL Python driver to compile on arm64
   libkrb5-dev \
-  # Postgres client
   libpq-dev \
-  # ODBC support:
   g++ unixodbc-dev \
-  # for SAML
   xmlsec1 \
-  # Additional packages required for data sources:
   libssl-dev \
   default-libmysqlclient-dev \
   freetds-dev \
@@ -72,7 +77,7 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-
+# Download and install Microsoft ODBC driver and Databricks ODBC driver
 ARG TARGETPLATFORM
 ARG databricks_odbc_driver_url=https://databricks-bi-artifacts.s3.us-east-2.amazonaws.com/simbaspark-drivers/odbc/2.6.26/SimbaSparkODBC-2.6.26.1045-Debian-64bit.zip
 RUN <<EOF
@@ -93,6 +98,7 @@ RUN <<EOF
   fi
 EOF
 
+# Set working directory and install Poetry
 WORKDIR /app
 
 ENV POETRY_VERSION=1.8.3
@@ -100,21 +106,27 @@ ENV POETRY_HOME=/etc/poetry
 ENV POETRY_VIRTUALENVS_CREATE=false
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
-# Avoid crashes, including corrupted cache artifacts, when building multi-platform images with GitHub Actions.
+# Clear any cached poetry artifacts
 RUN /etc/poetry/bin/poetry cache clear pypi --all
 
+# Copy pyproject.toml and poetry.lock to the working directory
 COPY pyproject.toml poetry.lock ./
 
-ARG POETRY_OPTIONS="--no-root --no-interaction --no-ansi"
-# for LDAP authentication, install with `ldap3` group
-# disabled by default due to GPL license conflict
+# Set default values for install groups and poetry options
 ARG install_groups="main,all_ds,dev"
-RUN /etc/poetry/bin/poetry install --only $install_groups $POETRY_OPTIONS
+ARG POETRY_OPTIONS="--no-root --no-interaction --no-ansi"
 
+# Install dependencies
+RUN /etc/poetry/bin/poetry install --only $install_groups $POETRY_OPTIONS --verbose
+
+# Copy the rest of the application and frontend build into the container
 COPY --chown=redash . /app
 COPY --from=frontend-builder --chown=redash /frontend/client/dist /app/client/dist
+
+# Change ownership to 'redash' user and set the working directory
 RUN chown redash /app
 USER redash
 
+# Set entrypoint and default command for the application
 ENTRYPOINT ["/app/bin/docker-entrypoint"]
 CMD ["server"]
