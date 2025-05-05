@@ -1,0 +1,88 @@
+version: '3'
+services:
+  server:
+    image: redash/redash:10.0.0.b50363
+    command: server
+    ports:
+      - "5001:5000"
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres:postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "redash-selfhosted"
+      REDASH_SECRET_KEY: "redash-selfhosted"
+      REDASH_WEB_WORKERS: 4
+      REDASH_MAIL_SERVER: "email"
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: "redash@example.com"
+      GUNICORN_TIMEOUT: 120
+      REDASH_SCHEMAS_REFRESH_SCHEDULE: 60
+      REDASH_SCHEMA_RUN_TABLE_SIZE_CALCULATIONS: "false"
+    depends_on:
+      - postgres
+      - redis
+      - email
+    restart: always
+    platform: linux/amd64
+    networks:
+      - redash-network
+
+  worker:
+    image: redash/redash:10.0.0.b50363
+    command: scheduler
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres:postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "redash-selfhosted"
+      REDASH_SECRET_KEY: "redash-selfhosted"
+      REDASH_MAIL_SERVER: "email"
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: "redash@example.com"
+      REDASH_SCHEMAS_REFRESH_SCHEDULE: 60
+      REDASH_SCHEMA_RUN_TABLE_SIZE_CALCULATIONS: "false"
+    depends_on:
+      - server
+    restart: always
+    platform: linux/amd64
+    networks:
+      - redash-network
+
+  redis:
+    image: redis:7.0-alpine
+    restart: always
+    networks:
+      - redash-network
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    platform: linux/amd64
+    networks:
+      - redash-network
+
+  email:
+    image: maildev/maildev
+    ports:
+      - "1025:1025"
+      - "1080:1080"
+    restart: always
+    networks:
+      - redash-network
+
+networks:
+  redash-network:
+    driver: bridge
+
+volumes:
+  postgres_data: 

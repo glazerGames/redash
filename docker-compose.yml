@@ -1,0 +1,67 @@
+# This is an example configuration for Docker Compose. Make sure to atleast update
+# the cookie secret & postgres database password.
+#
+# Some other recommendations:
+# 1. To persist Postgres data, assign it a volume host location.
+# 2. Split the worker service to adhoc workers and scheduled queries workers.
+version: '2'
+services:
+  server:
+    image: redash/redash:latest
+    command: server
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "5001:5000"
+    environment:
+      REDASH_COOKIE_SECRET: redash-selfhosted
+      REDASH_SECRET_KEY: redash-selfhosted
+      REDASH_LOG_LEVEL: INFO
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_DATABASE_URL: postgresql://postgres:postgres@postgres/postgres
+      REDASH_MAIL_SERVER: email
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: redash@example.com
+      GUNICORN_TIMEOUT: 120
+    restart: always
+    platform: linux/amd64
+  worker:
+    image: redash/redash:latest
+    command: scheduler
+    depends_on:
+      - server
+    environment:
+      REDASH_COOKIE_SECRET: redash-selfhosted
+      REDASH_SECRET_KEY: redash-selfhosted
+      REDASH_LOG_LEVEL: INFO
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_DATABASE_URL: postgresql://postgres:postgres@postgres/postgres
+      REDASH_MAIL_SERVER: email
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: redash@example.com
+    restart: always
+    platform: linux/amd64
+  redis:
+    image: redis:7.0-alpine
+    restart: always
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    restart: always
+    platform: linux/amd64
+  email:
+    image: maildev/maildev
+    ports:
+      - "1025:1025"
+      - "1080:1080"
+    restart: always 

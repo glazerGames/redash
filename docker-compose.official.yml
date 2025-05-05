@@ -1,0 +1,76 @@
+version: '3'
+services:
+  server:
+    image: redash/redash:latest
+    command: server
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "5001:5000"
+    environment:
+      REDASH_HOST: http://localhost:5001
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "${REDASH_COOKIE_SECRET}"
+      REDASH_SECRET_KEY: "${REDASH_SECRET_KEY}"
+      REDASH_MAIL_DEFAULT_SENDER: "redash@example.com"
+      REDASH_MAIL_SERVER: "email"
+      REDASH_MAIL_PORT: 1025
+      PYTHONUNBUFFERED: 0
+    platform: linux/amd64
+
+  worker:
+    image: redash/redash:latest
+    command: worker
+    depends_on:
+      - server
+    environment:
+      REDASH_HOST: http://localhost:5001
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "${REDASH_COOKIE_SECRET}"
+      REDASH_SECRET_KEY: "${REDASH_SECRET_KEY}"
+      PYTHONUNBUFFERED: 0
+    platform: linux/amd64
+
+  scheduler:
+    image: redash/redash:latest
+    command: scheduler
+    depends_on:
+      - server
+    environment:
+      REDASH_HOST: http://localhost:5001
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "${REDASH_COOKIE_SECRET}"
+      REDASH_SECRET_KEY: "${REDASH_SECRET_KEY}"
+    platform: linux/amd64
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    platform: linux/amd64
+
+  email:
+    image: maildev/maildev
+    ports:
+      - "1080:1080"
+      - "1025:1025"
+    restart: unless-stopped
+
+volumes:
+  postgres_data: 

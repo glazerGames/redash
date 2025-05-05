@@ -1,0 +1,34 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    platform: linux/amd64
+
+  redis:
+    image: redis:7.0-alpine
+    restart: always
+
+  setup:
+    image: redash/redash:10.0.0.b50363
+    command: create_db
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres:postgres@postgres/postgres"
+      REDASH_COOKIE_SECRET: "redash-selfhosted"
+      REDASH_SECRET_KEY: "redash-selfhosted"
+    platform: linux/amd64
+
+volumes:
+  postgres_data: 
