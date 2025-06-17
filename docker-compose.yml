@@ -47,10 +47,11 @@ services:
   redis:
     image: redis:7.0-alpine
     restart: always
+    platform: linux/amd64
   postgres:
     image: postgres:14-alpine
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
@@ -64,4 +65,64 @@ services:
     ports:
       - "1025:1025"
       - "1080:1080"
-    restart: always 
+    restart: always
+    platform: linux/amd64
+  adhoc_worker:
+    image: redash/redash:latest
+    command: worker
+    depends_on:
+      - server
+    environment:
+      REDASH_COOKIE_SECRET: redash-selfhosted
+      REDASH_SECRET_KEY: redash-selfhosted
+      REDASH_LOG_LEVEL: INFO
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_DATABASE_URL: postgresql://postgres:postgres@postgres/postgres
+      REDASH_MAIL_SERVER: email
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: redash@example.com
+    restart: always
+    platform: linux/amd64
+  scheduled_worker:
+    image: redash/redash:latest
+    command: worker
+    depends_on:
+      - server
+    environment:
+      REDASH_COOKIE_SECRET: redash-selfhosted
+      REDASH_SECRET_KEY: redash-selfhosted
+      REDASH_LOG_LEVEL: INFO
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_DATABASE_URL: postgresql://postgres:postgres@postgres/postgres
+      REDASH_MAIL_SERVER: email
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: redash@example.com
+    restart: always
+    platform: linux/amd64
+  scheduler:
+    image: redash/redash:latest
+    command: scheduler
+    depends_on:
+      - server
+    environment:
+      REDASH_COOKIE_SECRET: redash-selfhosted
+      REDASH_SECRET_KEY: redash-selfhosted
+      REDASH_LOG_LEVEL: INFO
+      REDASH_REDIS_URL: redis://redis:6379/0
+      REDASH_DATABASE_URL: postgresql://postgres:postgres@postgres/postgres
+      REDASH_MAIL_SERVER: email
+      REDASH_MAIL_PORT: 1025
+      REDASH_MAIL_USE_TLS: "false"
+      REDASH_MAIL_DEFAULT_SENDER: redash@example.com
+    restart: always
+    platform: linux/amd64
+  nginx:
+    image: redash/nginx:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: always
+    platform: linux/amd64
